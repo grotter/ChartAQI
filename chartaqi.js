@@ -2,8 +2,7 @@ var ChartAQI = function () {
     var inst = this;
     var myChart;
     var latest = document.getElementById('latest');
-    var colors = ['black', 'red', 'blue', 'green', 'orange', 'purple'];
-
+    
     var sensors = {
         custom: [],
         purpleair: []
@@ -72,12 +71,11 @@ var ChartAQI = function () {
         return 'rgba(' + ran() + ', ' + ran() + ', ' + ran() + ', ' + alpha + ')';
     }
 
-    this.onSensorData = function (feeds, title, order) {
-        var isCustom = typeof(order) != 'undefined';
+    this.onSensorData = function (json, title, isCustom) {
         var data = [];
 
-        for (var i in feeds) {
-            var feed = feeds[i];
+        for (var i in json.feeds) {
+            var feed = json.feeds[i];
             var val = 0;
 
             if (isCustom) {
@@ -95,11 +93,19 @@ var ChartAQI = function () {
         }
 
         var border = isCustom ? 3 : 1;
-        var color = this.getRandomColor(.75);
+        var color = isCustom ? 'black' : this.getRandomColor(.75);
 
-        if (isCustom) {
-            var col = colors[order];
-            color = !col ? this.getRandomColor(1) : col;
+        // custom color from channel metadata
+        if (isCustom && json.channel.metadata) {
+            try {
+                var metadata = JSON.parse(json.channel.metadata);
+                
+                if (metadata.color) {
+                    color = metadata.color;
+                }
+            } catch (e) {
+                console.log(e);
+            }
         }
 
         var myData = {
@@ -130,7 +136,7 @@ var ChartAQI = function () {
             var json = JSON.parse(xhr.responseText);
             
             if (json.feeds) {
-                inst.onSensorData(json.feeds, 'PurpleAir / ' + result.Label);
+                inst.onSensorData(json, 'PurpleAir / ' + result.Label);
             }
         }
 
@@ -162,7 +168,7 @@ var ChartAQI = function () {
     }
 
     this.getThingSpeakEndpoint = function (id, key, results) {
-        var endpoint = 'https://api.thingspeak.com/channels/' + id + '/feeds.json?api_key=' + key;
+        var endpoint = 'https://api.thingspeak.com/channels/' + id + '/feeds.json?metadata=true&api_key=' + key;
 
         if (typeof(results) == 'number') {
             endpoint += '&results=' + results;
@@ -177,7 +183,7 @@ var ChartAQI = function () {
         return parseInt(results);
     }
 
-    this.getCustomData = function (id, key, order) {
+    this.getCustomData = function (id, key, isFirst) {
         var results = this.getResults();
 
         var endpoint = this.getThingSpeakEndpoint(id, key, results);
@@ -194,10 +200,10 @@ var ChartAQI = function () {
             }
 
             // graph sensor data
-            inst.onSensorData(json.feeds, json.channel.name, order);
+            inst.onSensorData(json, json.channel.name, true);
 
             // update latest if first
-            if (order == 0) {
+            if (isFirst) {
                 var latestData = json.feeds[json.feeds.length - 1];
                 inst.updateLatest(latestData, json.channel.name);
             }
@@ -227,7 +233,7 @@ var ChartAQI = function () {
             if (typeof(sensor) != 'object') continue;
             if (sensor.length < 2) continue;
 
-            this.getCustomData(sensor[0], sensor[1], i);
+            this.getCustomData(sensor[0], sensor[1], i == 0);
         }
 
         // purpleair sensors
