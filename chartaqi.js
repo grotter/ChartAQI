@@ -35,7 +35,11 @@ var ChartAQI = function () {
         latest.innerHTML += '<p><small>Latest read on ' + lastReadDate.toLocaleString('en-US') + '</small></p>';
         latest.innerHTML += '<h2>AQI ' + Math.round(parseFloat(data.field4)) + '</h2>';
 
-        latest.onclick = _loadData;
+        if ('ontouchend' in document.documentElement) {
+            latest.ontouchend = _loadData;
+        } else {
+            latest.onclick = _loadData;
+        }
     }
 
     this.initChart = function () {
