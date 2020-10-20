@@ -8,11 +8,34 @@ var ChartAQI = function () {
         purpleair: []
     };
 
+    var _loadData = function () {
+        // clear data
+        myChart.data.datasets = [];
+
+        // custom sensors
+        for (var i in sensors.custom) {
+            var sensor = sensors.custom[i].split('|');
+            if (typeof(sensor) != 'object') continue;
+            if (sensor.length < 2) continue;
+
+            inst.getCustomData(sensor[0], sensor[1], i == 0);
+        }
+
+        // purpleair sensors
+        for (var i in sensors.purpleair) {
+            inst.getPurpleAirData(sensors.purpleair[i]);
+        }
+
+        return false;
+    }
+
     this.updateLatest = function (data, name) {
         var lastReadDate = new Date(data.created_at);
         latest.innerHTML = '<h3>' + name + '</h3>';
         latest.innerHTML += '<p><small>Latest read on ' + lastReadDate.toLocaleString('en-US') + '</small></p>';
         latest.innerHTML += '<h2>AQI ' + Math.round(parseFloat(data.field4)) + '</h2>';
+
+        latest.onclick = _loadData;
     }
 
     this.initChart = function () {
@@ -226,20 +249,7 @@ var ChartAQI = function () {
         }
 
         this.initChart();
-        
-        // custom sensors
-        for (var i in sensors.custom) {
-            var sensor = sensors.custom[i].split('|');
-            if (typeof(sensor) != 'object') continue;
-            if (sensor.length < 2) continue;
-
-            this.getCustomData(sensor[0], sensor[1], i == 0);
-        }
-
-        // purpleair sensors
-        for (var i in sensors.purpleair) {
-            this.getPurpleAirData(sensors.purpleair[i]);
-        }
+        _loadData();
     }
 
     this.initialize();
