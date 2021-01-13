@@ -6,4 +6,4 @@ A small graph built on [Chart.js](https://github.com/chartjs/Chart.js) to view y
 * `purpleair` (optional) - A comma-delimited collection of PurpleAir sensor IDs
 * `results` (optional) - Number of results, defaults to 100
 
-### ♥
+### ♥ Antifascist Science Club
