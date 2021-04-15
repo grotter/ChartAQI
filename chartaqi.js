@@ -201,7 +201,7 @@ var ChartAQI = function () {
             endpoint += '&results=' + results;
         }
 
-        return endpoint;
+        return 'https://www.ocf.berkeley.edu/~grotter/aqi/json/?endpoint=' + encodeURIComponent(endpoint);
     }
 
     this.getResults = function () {
