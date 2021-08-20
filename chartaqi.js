@@ -184,6 +184,7 @@ var ChartAQI = function () {
             var json = JSON.parse(xhr.responseText);
             if (!json.results) return;
 
+            console.log(json);
             inst.onPurpleAirData(json.results[0]);
         }
 
