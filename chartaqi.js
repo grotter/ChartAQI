@@ -2,6 +2,7 @@ var ChartAQI = function () {
     var inst = this;
     var myChart;
     var latest = document.getElementById('latest');
+    var proxyUrl = 'https://www.ocf.berkeley.edu/~grotter/aqi/json/?endpoint=';
     
     var sensors = {
         custom: [],
@@ -160,10 +161,14 @@ var ChartAQI = function () {
         xhr.open('GET', endpoint, true);
 
         xhr.onload = function () {
-            var json = JSON.parse(xhr.responseText);
-            
-            if (json.feeds) {
-                inst.onSensorData(json, 'PurpleAir / ' + result.Label);
+            try {
+                var json = JSON.parse(xhr.responseText);
+                
+                if (json.feeds) {
+                    inst.onSensorData(json, 'PurpleAir / ' + result.Label);
+                }
+            } catch (err) {
+                console.log(err);
             }
         }
 
@@ -175,17 +180,20 @@ var ChartAQI = function () {
     }
 
     this.getPurpleAirData = function (id) {
-        var endpoint = 'https://www.purpleair.com/json?show=' + id;
-
+        var endpoint = this.getPurpleAirEndpoint(id);
         var xhr = new XMLHttpRequest();
         xhr.open('GET', endpoint, true);
 
         xhr.onload = function() {
-            var json = JSON.parse(xhr.responseText);
-            if (!json.results) return;
+            try {
+                var json = JSON.parse(xhr.responseText);
+                if (!json.results) return;
 
-            console.log(json);
-            inst.onPurpleAirData(json.results[0]);
+                console.log(json);
+                inst.onPurpleAirData(json.results[0]);
+            } catch (err) {
+                console.log(err);
+            }
         }
 
         xhr.onerror = function (e) {
@@ -195,6 +203,13 @@ var ChartAQI = function () {
         xhr.send();
     }
 
+    this.getPurpleAirEndpoint = function (id, key, results) {
+        var endpoint = 'https://map.purpleair.com/v1/sensors/' + id;
+        endpoint += '/history/?fields=pm2.5_atm_b&token={PURPLEAIR_API_KEY}';
+
+        return proxyUrl + encodeURIComponent(endpoint);
+    }
+
     this.getThingSpeakEndpoint = function (id, key, results) {
         var endpoint = 'https://api.thingspeak.com/channels/' + id + '/feeds.json?metadata=true&api_key=' + key;
 
@@ -202,7 +217,7 @@ var ChartAQI = function () {
             endpoint += '&results=' + results;
         }
 
-        return 'https://www.ocf.berkeley.edu/~grotter/aqi/json/?endpoint=' + encodeURIComponent(endpoint);
+        return proxyUrl + encodeURIComponent(endpoint);
     }
 
     this.getResults = function () {
@@ -219,21 +234,25 @@ var ChartAQI = function () {
         xhr.open('GET', endpoint, true);
 
         xhr.onload = function () {
-            var json = JSON.parse(xhr.responseText);
-            console.log(json);
-            
-            if (!json.feeds) {
-                latest.innerHTML = '<h1>API error</h1>';
-                return;
-            }
+            try {
+                var json = JSON.parse(xhr.responseText);
+                console.log(json);
+                
+                if (!json.feeds) {
+                    latest.innerHTML = '<h1>API error</h1>';
+                    return;
+                }
 
-            // graph sensor data
-            inst.onSensorData(json, json.channel.name, true);
+                // graph sensor data
+                inst.onSensorData(json, json.channel.name, true);
 
-            // update latest if first
-            if (isFirst) {
-                var latestData = json.feeds[json.feeds.length - 1];
-                inst.updateLatest(latestData, json.channel.name);
+                // update latest if first
+                if (isFirst) {
+                    var latestData = json.feeds[json.feeds.length - 1];
+                    inst.updateLatest(latestData, json.channel.name);
+                }
+            } catch (err) {
+                console.log(err);
             }
         }
 
