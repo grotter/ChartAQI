@@ -1,9 +1,10 @@
 # ChartAQI
 
-A small graph built on [Chart.js](https://github.com/chartjs/Chart.js) to view your [ArduinoAQI](https://github.com/grotter/ArduinoAQI) sensor data and any optional PurpleAir sensors. The graph uses the following GET variables:
+A small graph built on [Chart.js](https://github.com/chartjs/Chart.js) to view [ArduinoAQI](https://github.com/grotter/ArduinoAQI) and PurpleAir sensor data. To retrieve ThingSpeak API keys and sensor IDs from publicly accessible PurpleAir sensors, inspect data from the [PurpleAir API](https://api.purpleair.com/#api-sensors).
 
-* `custom` - A comma-delimited collection of ThingSpeak sensor IDs and read API keys, e.g. custom=123|asdf,345|qwer
-* `purpleair` (optional) - A comma-delimited collection of PurpleAir sensor IDs
+The graph uses the following GET variables:
+
+* `sensors` - A comma-delimited collection of ThingSpeak sensor IDs and read API keys, e.g. sensors=123|asdf,345|qwer
 * `results` (optional) - Number of results, defaults to 100
 
 ### ♥ Antifascist Science Club

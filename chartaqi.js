@@ -3,38 +3,38 @@ var ChartAQI = function () {
     var myChart;
     var latest = document.getElementById('latest');
     var proxyUrl = 'https://www.ocf.berkeley.edu/~grotter/aqi/json/?endpoint=';
-    
-    var sensors = {
-        custom: [],
-        purpleair: []
-    };
+    var sensors = [];
 
     var _loadData = function () {
         // clear data
         myChart.data.datasets = [];
 
         // custom sensors
-        for (var i in sensors.custom) {
-            var sensor = sensors.custom[i].split('|');
+        for (var i in sensors) {
+            var sensor = sensors[i].split('|');
             if (typeof(sensor) != 'object') continue;
             if (sensor.length < 2) continue;
 
-            inst.getCustomData(sensor[0], sensor[1], i == 0);
-        }
-
-        // purpleair sensors
-        for (var i in sensors.purpleair) {
-            inst.getPurpleAirData(sensors.purpleair[i]);
+            inst.getData(sensor[0], sensor[1], i == 0);
         }
 
         return false;
     }
 
-    this.updateLatest = function (data, name) {
+    var _isCustom = function (json) {
+        if (!json.channel || !json.channel.name) return false;
+        return json.channel.name.indexOf('ArduinoAQI') === 0;
+    }
+
+    this.updateLatest = function (data, name, isCustom) {
+        if (!isCustom) name = 'PurpleAir / ' + name;
+
         var lastReadDate = new Date(data.created_at);
         latest.innerHTML = '<h3>' + name + '</h3>';
         latest.innerHTML += '<p><small>Latest read on ' + lastReadDate.toLocaleString('en-US') + '</small></p>';
-        latest.innerHTML += '<h2>AQI ' + Math.round(parseFloat(data.field4)) + '</h2>';
+        
+        var val = isCustom ? parseFloat(data.field4) : CalculateAQI.getPM25AQI(parseFloat(data.field2));
+        latest.innerHTML += '<h2>AQI ' + Math.round(val) + '</h2>';
 
         if ('ontouchend' in document.documentElement) {
             latest.ontouchend = _loadData;
@@ -99,8 +99,9 @@ var ChartAQI = function () {
         return 'rgba(' + ran() + ', ' + ran() + ', ' + ran() + ', ' + alpha + ')';
     }
 
-    this.onSensorData = function (json, title, isCustom) {
+    this.onSensorData = function (json, title) {
         var data = [];
+        var isCustom = _isCustom(json);
 
         for (var i in json.feeds) {
             var feed = json.feeds[i];
@@ -111,7 +112,7 @@ var ChartAQI = function () {
                 val = parseFloat(feed.field4).toFixed(2);
             } else {
                 // raw data from a PurpleAir sensor
-                val = CalculateAQI.getPM25AQI(parseFloat(feed.field8)).toFixed(2);
+                val = CalculateAQI.getPM25AQI(parseFloat(feed.field2)).toFixed(2);
             }
 
             data.push({
@@ -153,63 +154,6 @@ var ChartAQI = function () {
         myChart.update();
     }
 
-    this.onPurpleAirData = function (result) {
-        var numResults = this.getResults();
-        var endpoint = this.getThingSpeakEndpoint(result.THINGSPEAK_PRIMARY_ID, result.THINGSPEAK_PRIMARY_ID_READ_KEY, numResults);
-
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', endpoint, true);
-
-        xhr.onload = function () {
-            try {
-                var json = JSON.parse(xhr.responseText);
-                
-                if (json.feeds) {
-                    inst.onSensorData(json, 'PurpleAir / ' + result.Label);
-                }
-            } catch (err) {
-                console.log(err);
-            }
-        }
-
-        xhr.onerror = function (e) {
-            console.log(e);
-        }
-
-        xhr.send();
-    }
-
-    this.getPurpleAirData = function (id) {
-        var endpoint = this.getPurpleAirEndpoint(id);
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', endpoint, true);
-
-        xhr.onload = function() {
-            try {
-                var json = JSON.parse(xhr.responseText);
-                if (!json.results) return;
-
-                console.log(json);
-                inst.onPurpleAirData(json.results[0]);
-            } catch (err) {
-                console.log(err);
-            }
-        }
-
-        xhr.onerror = function (e) {
-            console.log(e);
-        }
-
-        xhr.send();
-    }
-
-    this.getPurpleAirEndpoint = function (id, key, results) {
-        var endpoint = 'https://map.purpleair.com/v1/sensors/' + id;
-        endpoint += '/history/?fields=pm2.5_atm_b&token={PURPLEAIR_API_KEY}';
-
-        return proxyUrl + encodeURIComponent(endpoint);
-    }
-
     this.getThingSpeakEndpoint = function (id, key, results) {
         var endpoint = 'https://api.thingspeak.com/channels/' + id + '/feeds.json?metadata=true&api_key=' + key;
 
@@ -226,7 +170,7 @@ var ChartAQI = function () {
         return parseInt(results);
     }
 
-    this.getCustomData = function (id, key, isFirst) {
+    this.getData = function (id, key, isFirst) {
         var results = this.getResults();
 
         var endpoint = this.getThingSpeakEndpoint(id, key, results);
@@ -244,12 +188,15 @@ var ChartAQI = function () {
                 }
 
                 // graph sensor data
-                inst.onSensorData(json, json.channel.name, true);
+                var name = json.channel.name;
+                if (!_isCustom(json)) name = 'PurpleAir / ' + name;
+                
+                inst.onSensorData(json, name);
 
                 // update latest if first
                 if (isFirst) {
                     var latestData = json.feeds[json.feeds.length - 1];
-                    inst.updateLatest(latestData, json.channel.name);
+                    inst.updateLatest(latestData, json.channel.name, _isCustom(json));
                 }
             } catch (err) {
                 console.log(err);
@@ -265,11 +212,14 @@ var ChartAQI = function () {
     }
 
     this.initialize = function () {
-        for (var i in sensors) {
-            var myVal = this.getQueryVariable(i);
-            if (myVal === false) continue;
+        var vars = ['sensors', 'custom'];
 
-            sensors[i] = myVal.split(',');
+        for (var i in vars) {
+            var queryString = this.getQueryVariable(vars[i]);
+
+            if (queryString) {
+                sensors = sensors.concat(queryString.split(','));
+            }
         }
 
         this.initChart();
