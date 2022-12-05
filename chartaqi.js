@@ -2,7 +2,7 @@ var ChartAQI = function () {
     var inst = this;
     var myChart;
     var latest = document.getElementById('latest');
-    var proxyUrl = 'https://www.ocf.berkeley.edu/~grotter/aqi/json/?endpoint=';
+    var proxyUrl = 'https://utility.calacademy.org/grotter/aqi/?endpoint=';
     var sensors = [];
 
     var _loadData = function () {
