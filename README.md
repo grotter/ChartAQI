@@ -7,4 +7,4 @@ The graph uses the following GET variables:
 * `sensors` - A comma-delimited collection of ThingSpeak sensor IDs and read API keys, e.g. sensors=123|asdf,345|qwer
 * `results` (optional) - Number of results, defaults to 100
 
-### ♥ Antifascist Science Club
+### 💨💨💨
