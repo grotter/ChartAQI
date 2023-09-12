@@ -2,12 +2,22 @@ var ChartAQI = function () {
     var inst = this;
     var myChart;
     var latest = document.getElementById('latest');
+    var isPurpleAirLoad = false;
     var proxyUrl = 'https://utility.calacademy.org/grotter/aqi/?endpoint=';
     var sensors = [];
 
-    var _loadData = function () {
+    var range = {
+        start: false,
+        end: false
+    };
+
+    var _loadData = function (isPurpleAir) {
+        if (isPurpleAir) {
+            isPurpleAirLoad = true;
+        }
+
         // clear data
-        myChart.data.datasets = [];
+        if (!isPurpleAir) myChart.data.datasets = [];
 
         // custom sensors
         for (var i in sensors) {
@@ -15,6 +25,11 @@ var ChartAQI = function () {
             if (typeof(sensor) != 'object') continue;
             if (sensor.length < 2) continue;
 
+            var isSensorPurpleAir = sensor[0].indexOf('purpleair-') === 0;
+
+            if (isPurpleAir && !isSensorPurpleAir) continue;
+            if (!isPurpleAir && isSensorPurpleAir) continue;
+            
             inst.getData(sensor[0], sensor[1], i == 0);
         }
 
@@ -22,24 +37,36 @@ var ChartAQI = function () {
     }
 
     var _isCustom = function (json) {
-        if (!json.channel || !json.channel.name) return false;
-        return json.channel.name.indexOf('ArduinoAQI') === 0;
+        if (!json.channel) return false;
+        return true;
+    }
+
+    function _sortPurpleAirData (a, b) {
+        if (a[0] === b[0]) {
+            return 0;
+        }
+
+        return (a[0] < b[0]) ? -1 : 1;
     }
 
     this.updateLatest = function (data, name, isCustom) {
-        if (!isCustom) name = 'PurpleAir / ' + name;
-
-        var lastReadDate = new Date(data.created_at);
+        var lastReadDate = isCustom ? new Date(data.created_at) : new Date(data[0] * 1000);
         latest.innerHTML = '<h3>' + name + '</h3>';
         latest.innerHTML += '<p><small>Latest read on ' + lastReadDate.toLocaleString('en-US') + '</small></p>';
         
-        var val = isCustom ? parseFloat(data.field4) : CalculateAQI.getPM25AQI(parseFloat(data.field2));
+        var val = isCustom ? parseFloat(data.field4) : CalculateAQI.getPM25AQI(parseFloat(data[1]));
         latest.innerHTML += '<h2>AQI ' + Math.round(val) + '</h2>';
 
+        isPurpleAirLoad = false;
+
         if ('ontouchend' in document.documentElement) {
-            latest.ontouchend = _loadData;
+            latest.ontouchend = function () {
+                _loadData();
+            };
         } else {
-            latest.onclick = _loadData;
+            latest.onclick = function () {
+                _loadData();
+            };
         }
     }
 
@@ -101,23 +128,45 @@ var ChartAQI = function () {
 
     this.onSensorData = function (json, title) {
         var data = [];
+        var results = this.getResults();
         var isCustom = _isCustom(json);
+        
+        if (!isCustom) {
+            json.feeds = json.data.sort(_sortPurpleAirData);
+        }
+        
+        if (json.feeds.length > results) {
+            json.feeds = json.feeds.splice(results * -1);
+        }
 
         for (var i in json.feeds) {
             var feed = json.feeds[i];
-            var val = 0;
+            var valX = 0;
+            var valY = 0;
 
             if (isCustom) {
+                valX = new Date(feed.created_at);
+
+                if (i == 0) {
+                    range.start = valX;
+                }
+
+                if (i == json.feeds.length - 1) {
+                    range.end = valX;
+                }
+
                 // already calculated
-                val = parseFloat(feed.field4).toFixed(2);
+                valY = parseFloat(feed.field4).toFixed(2);
             } else {
+                valX = new Date(feed[0] * 1000);
+
                 // raw data from a PurpleAir sensor
-                val = CalculateAQI.getPM25AQI(parseFloat(feed.field2)).toFixed(2);
+                valY = CalculateAQI.getPM25AQI(parseFloat(feed[2])).toFixed(2);
             }
 
             data.push({
-                x: new Date(feed.created_at),
-                y: val
+                x: valX,
+                y: valY
             });
         }
 
@@ -152,6 +201,8 @@ var ChartAQI = function () {
 
         myChart.data.datasets.push(myData);
         myChart.update();
+
+        if (!isPurpleAirLoad) _loadData(true);
     }
 
     this.getThingSpeakEndpoint = function (id, key, results) {
@@ -164,6 +215,27 @@ var ChartAQI = function () {
         return proxyUrl + encodeURIComponent(endpoint);
     }
 
+    this.getPurpleAirEndpoint = function (id, key) {
+        var endpoint = 'https://map.purpleair.com/v1/sensors/' + id + '/history/?fields=pm2.5_atm_a,pm2.5_atm_b&read_key=' + key + '&token={PURPLEAIR_API_KEY}';
+
+        if (range.start) {
+            endpoint += '&start_timestamp=' + (new Date(range.start).getTime() / 1000);    
+        }
+        if (range.end) {
+            endpoint += '&end_timestamp=' + (new Date(range.end).getTime() / 1000);    
+        }
+
+        return proxyUrl + encodeURIComponent(endpoint);
+    }
+
+    this.getEndpoint = function (id, key, results) {
+        if (id.indexOf('purpleair-') === 0) {
+            return this.getPurpleAirEndpoint(id.replace('purpleair-', ''), key);
+        }
+
+        return this.getThingSpeakEndpoint(id, key, results);
+    }
+
     this.getResults = function () {
         var r = this.getQueryVariable('results');
         var results = parseInt(r) ? r : '100';
@@ -173,7 +245,7 @@ var ChartAQI = function () {
     this.getData = function (id, key, isFirst) {
         var results = this.getResults();
 
-        var endpoint = this.getThingSpeakEndpoint(id, key, results);
+        var endpoint = this.getEndpoint(id, key, results);
         var xhr = new XMLHttpRequest();
         xhr.open('GET', endpoint, true);
 
@@ -182,21 +254,22 @@ var ChartAQI = function () {
                 var json = JSON.parse(xhr.responseText);
                 console.log(json);
                 
-                if (!json.feeds) {
+                if (!json.feeds && !json.data) {
                     latest.innerHTML = '<h1>API error</h1>';
                     return;
                 }
 
+                var isCustom = _isCustom(json);
+
                 // graph sensor data
-                var name = json.channel.name;
-                if (!_isCustom(json)) name = 'PurpleAir / ' + name;
+                var name = isCustom ? json.channel.name : 'PurpleAir';
                 
                 inst.onSensorData(json, name);
 
                 // update latest if first
                 if (isFirst) {
-                    var latestData = json.feeds[json.feeds.length - 1];
-                    inst.updateLatest(latestData, json.channel.name, _isCustom(json));
+                    var latestData = isCustom ? json.feeds[json.feeds.length - 1] : json.data[json.data.length - 1];
+                    inst.updateLatest(latestData, name, isCustom);
                 }
             } catch (err) {
                 console.log(err);
